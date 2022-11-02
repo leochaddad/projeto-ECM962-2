@@ -3,9 +3,13 @@
 // Users can send messages to the chat room, max 500 characters. Messages are timestamped
 // If the message has more than 500 characters, the message is rejected
 
+import { createPubSub } from "graphql-yoga";
+
 // Users can subscribe to one or more chat rooms and receive messages from that room in real time
 
 // A query can be made to see how many users are subscribed to each chat room eg: { cinema: 10, general: 5, sports: 2 }
+
+const pubsub = createPubSub();
 
 export const typeDefs = /* GraphQL */ `
   enum Category {
@@ -32,6 +36,12 @@ export const typeDefs = /* GraphQL */ `
     messages: [Message]
   }
 
+  type RoomSubscribers {
+    cinema: Int!
+    general: Int!
+    sports: Int!
+  }
+
   type Query {
     # return all chat rooms
     chatRooms: [ChatRoom]
@@ -39,6 +49,8 @@ export const typeDefs = /* GraphQL */ `
     users: [User]
     # return all messages
     messages: [Message]
+    # return user count subscribed to each chat room
+    roomSubscribers: RoomSubscribers
   }
 
   type Mutation {
@@ -84,6 +96,14 @@ export const resolvers = {
     chatRooms: () => db.chatRooms,
     users: () => db.users,
     messages: () => db.messages,
+    roomSubscribers: () => ({
+      cinema: db.users.filter((user) => user.subscribedTo.includes("CINEMA"))
+        .length,
+      general: db.users.filter((user) => user.subscribedTo.includes("GENERAL"))
+        .length,
+      sports: db.users.filter((user) => user.subscribedTo.includes("SPORTS"))
+        .length,
+    }),
   },
   Mutation: {
     createUser: (parent: any, args: any, context: any, info: any) => {
@@ -115,28 +135,19 @@ export const resolvers = {
         db.chatRooms
           .find((chatRoom: any) => chatRoom.category === args.category)
           .messages.push(message);
+        pubsub.publish(args.category, message);
         return message;
       }
     },
   },
   Subscription: {
     subscribeToChatRoom: {
-      subscribe: (parent, args, context, info) => {
-        const { pubsub } = context;
-        const channel = args.category;
-        return pubsub.asyncIterator(channel);
+      subscribe: (parent: any, args: any, context: any, info: any) => {
+        return pubsub.subscribe(args.category);
+      },
+      resolve: (payload: any) => {
+        return payload;
       },
     },
   },
 };
-
-// sample subscription query
-// subscription {
-//   subscribeToChatRoom(category: CINEMA) {
-//     message
-//     timestamp
-//     user {
-//       username
-//     }
-//   }
-// }
