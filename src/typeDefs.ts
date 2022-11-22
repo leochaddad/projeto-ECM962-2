@@ -9,6 +9,8 @@ import { createPubSub } from "graphql-yoga";
 
 // A query can be made to see how many users are subscribed to each chat room eg: { cinema: 10, general: 5, sports: 2 }
 
+// All actions are logged to the database (Query, Mutation, Subscription)
+
 const pubsub = createPubSub();
 
 export const typeDefs = /* GraphQL */ `
@@ -40,6 +42,11 @@ export const typeDefs = /* GraphQL */ `
     cinema: Int!
     general: Int!
     sports: Int!
+  }
+
+  type Log {
+    action: String!
+    timestamp: String!
   }
 
   type Query {
@@ -143,6 +150,15 @@ export const resolvers = {
   Subscription: {
     subscribeToChatRoom: {
       subscribe: (parent: any, args: any, context: any, info: any) => {
+        db.users.find(
+          (user: any) => user.username === args.username
+        ).subscribedTo = [
+          ...new Set([
+            ...db.users.find((user: any) => user.username === args.username)
+              .subscribedTo,
+            args.category,
+          ]),
+        ];
         return pubsub.subscribe(args.category);
       },
       resolve: (payload: any) => {
